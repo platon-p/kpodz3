@@ -41,8 +41,14 @@ func run(cfg Config) error {
 		return err
 	}
 
-	w := workers.NewInboxWorker(ch, &queue, accountRepo, accountService)
-	go func() { w.Run(context.Background()) }()
+	inbox := workers.NewInboxWorker(ch, &queue, accountRepo, accountService)
+	go func() { inbox.Run(context.Background()) }()
+
+	outbox := workers.NewOutboxWorker(accountRepo, ch, &queue)
+	go func() { outbox.Run(context.Background()) }()
+
+	tasker := workers.NewTaskWorker(accountService, accountRepo, ch, &queue)
+	go func() { tasker.Run(context.Background()) }()
 
 	return httpServer.Serve()
 }

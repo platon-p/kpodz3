@@ -2,7 +2,6 @@ package workers
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/rabbitmq/amqp091-go"
@@ -22,7 +21,12 @@ type InboxWorker struct {
 	accountService services.AccountService
 }
 
-func NewInboxWorker(ch *amqp091.Channel, queue *amqp091.Queue, accountRepo services.AccountRepo, accountService services.AccountService) *InboxWorker {
+func NewInboxWorker(
+	ch *amqp091.Channel,
+	queue *amqp091.Queue,
+	accountRepo services.AccountRepo,
+	accountService services.AccountService,
+) *InboxWorker {
 	return &InboxWorker{ch: ch, queue: queue, accountRepo: accountRepo, accountService: accountService}
 }
 
@@ -43,7 +47,6 @@ func (w *InboxWorker) Run(ctx context.Context) {
 					fmt.Println(err)
 				}
 			}()
-
 		}
 	}
 }
@@ -56,9 +59,6 @@ func (w *InboxWorker) handleMessage(msg *amqp091.Delivery) error {
 	}
 
 	err = w.handleEvent(msg, &e)
-	if errors.Is(err, ErrUnknownEventType) { // TODO:
-		return err
-	}
 	if err != nil {
 		return fmt.Errorf("handle event: %w", err)
 	}
@@ -69,57 +69,20 @@ func (w *InboxWorker) handleEvent(msg *amqp091.Delivery, e *pb.Event) error {
 	switch e.Type {
 	case pb.Event_TypeOrderCreated:
 		return w.handleOrderCreated(msg, e)
+	case pb.Event_TypeOrderSuccess, pb.Event_TypeOrderFailed:
+		// ignore
+		return nil
 	default:
-		return ErrUnknownEventType
+		return fmt.Errorf("%w: %s", ErrUnknownEventType, e.Type)
 	}
 }
 
 func (w *InboxWorker) handleOrderCreated(msg *amqp091.Delivery, e *pb.Event) error {
-	evt := e.GetOrderCreated()
-	err := w.accountService.Withdraw(context.Background(), int(evt.UserId), int(evt.Amount))
-
+	err := w.accountRepo.PushEvent(context.Background(), "inbox", e)
+	if err != nil {
+		msg.Nack(false, true)
+		return fmt.Errorf("push event to inbox: %w", err)
+	}
 	msg.Ack(false)
-	fmt.Println("ack")
-
-	if err == nil {
-		evtSuccess := &pb.Event{
-			Type: pb.Event_TypeOrderSuccess,
-			Data: &pb.Event_OrderSuccess{
-				OrderSuccess: &pb.Event_Order_Success{
-					Name:   evt.Name,
-					UserId: evt.UserId,
-				},
-			},
-		}
-		serialized, _ := proto.Marshal(evtSuccess)
-		return w.ch.Publish("", w.queue.Name, false, false, amqp091.Publishing{
-			ContentType: "application/protobuf",
-			Body:        serialized,
-		})
-	}
-
-	reason := pb.Event_Order_Failed_ReasonUnknown
-	if errors.Is(err, services.ErrInsufficientBalance) {
-		reason = pb.Event_Order_Failed_ReasonInsufficientBalance
-	} else if errors.Is(err, services.ErrAccountNotFound) {
-		reason = pb.Event_Order_Failed_ReasonAccountNotFound
-	}
-
-	evtFailed := &pb.Event{
-		Type: pb.Event_TypeOrderFailed,
-		Data: &pb.Event_OrderFailed{
-			OrderFailed: &pb.Event_Order_Failed{
-				Name:   evt.Name,
-				UserId: evt.UserId,
-				Reason: reason,
-			},
-		},
-	}
-	serialized, _ := proto.Marshal(evtFailed)
-
-	return w.ch.Publish("", w.queue.Name, false, false, amqp091.Publishing{
-		ContentType: "application/protobuf",
-		Body:        serialized,
-	})
-
+	return nil
 }

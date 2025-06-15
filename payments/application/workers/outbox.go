@@ -2,15 +2,28 @@ package workers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/platon-p/kpodz3/payments/application/services"
 	pb "github.com/platon-p/kpodz3/proto"
+	"github.com/rabbitmq/amqp091-go"
+	"google.golang.org/protobuf/proto"
 )
 
 type OutboxWorker struct {
 	accountRepo services.AccountRepo
+	ch          *amqp091.Channel
+	queue       *amqp091.Queue
+}
+
+func NewOutboxWorker(accountRepo services.AccountRepo, ch *amqp091.Channel, queue *amqp091.Queue) *OutboxWorker {
+	return &OutboxWorker{
+		accountRepo: accountRepo,
+		ch:          ch,
+		queue:       queue,
+	}
 }
 
 func (w *OutboxWorker) Run(ctx context.Context) {
@@ -20,30 +33,35 @@ func (w *OutboxWorker) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			evt, err := w.pullEvents(ctx)
+			err := w.check(ctx)
 			if err != nil {
-				fmt.Println(fmt.Errorf("pull events: %w", err))
-				continue
-			}
-			err = w.publishEvent(ctx, evt)
-			if err != nil {
-				fmt.Println(fmt.Errorf("publish events: %w", err))
-				continue
+				fmt.Println(err)
 			}
 		}
 	}
 }
 
-func (w *OutboxWorker) pullEvents(ctx context.Context) (*pb.Event, error) {
+func (w *OutboxWorker) check(ctx context.Context) error {
 	evt := new(pb.Event)
-	err := w.accountRepo.PopEvent(ctx, "order_success", evt)
-	if err != nil {
-		return nil, err
+	err := w.accountRepo.PopEvent(ctx, "outbox", evt)
+	if errors.Is(err, services.ErrNoEvents) {
+		return nil
 	}
-	return evt, nil
-}
-
-func (w *OutboxWorker) publishEvent(ctx context.Context, evt *pb.Event) error {
-	fmt.Println(evt)
-	panic("not implemented")
+	if err != nil {
+		return err
+	}
+	err = func() error {
+		data, err := proto.Marshal(evt)
+		if err != nil {
+			return err
+		}
+		return w.ch.Publish("", w.queue.Name, false, false, amqp091.Publishing{
+			ContentType: "application/protobuf",
+			Body:        data,
+		})
+	}()
+	if err != nil {
+		w.accountRepo.UnpopEvent(ctx, "outbox", evt)
+	}
+	return nil
 }

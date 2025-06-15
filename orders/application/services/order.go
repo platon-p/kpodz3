@@ -8,6 +8,8 @@ import (
 	pb "github.com/platon-p/kpodz3/proto"
 )
 
+var ErrNoEvents = fmt.Errorf("no events")
+
 type TXable[T any] interface {
 	TxBegin(ctx context.Context) T
 	TxCommit(ctx context.Context) error
@@ -20,15 +22,18 @@ type OrderRepo interface {
 	Create(ctx context.Context, order domain.Order) error
 	GetAll(ctx context.Context) ([]domain.Order, error)
 	Get(ctx context.Context, name string) (domain.Order, error)
+	SetStatus(ctx context.Context, name string, status domain.OrderStatus) error
 
 	PushEvent(ctx context.Context, key string, event *pb.Event) error
-	PopEvent(ctx context.Context, key string, dest *pb.Event) error
+	PopEvent(ctx context.Context, key string) (*pb.Event, error)
 }
 
 type OrderService interface {
 	CreateOrder(ctx context.Context, userId int, title string, amount int) (domain.Order, error)
 	GetAllOrders(ctx context.Context) ([]domain.Order, error)
 	GetOrder(ctx context.Context, name string) (domain.Order, error)
+
+	SetOrderStatus(ctx context.Context, name string, status domain.OrderStatus) error
 }
 
 type OrderServiceImpl struct {
@@ -44,6 +49,7 @@ func (s *OrderServiceImpl) CreateOrder(ctx context.Context, userId int, title st
 		UserId: userId,
 		Name:   title,
 		Amount: amount,
+		Status: domain.OrderStatusCreated,
 	}
 	repo := s.repo.TxBegin(ctx)
 	err := func() error {
@@ -60,7 +66,7 @@ func (s *OrderServiceImpl) CreateOrder(ctx context.Context, userId int, title st
 				},
 			},
 		}
-		if err := repo.PushEvent(ctx, "order_created", evt); err != nil {
+		if err := repo.PushEvent(ctx, "outbox", evt); err != nil {
 			return err
 		}
 		return nil
@@ -75,4 +81,23 @@ func (s *OrderServiceImpl) CreateOrder(ctx context.Context, userId int, title st
 		return domain.Order{}, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 	return order, nil
+}
+func (s *OrderServiceImpl) GetAllOrders(ctx context.Context) ([]domain.Order, error) {
+	orders, err := s.repo.GetAll(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all orders: %w", err)
+	}
+	return orders, nil
+}
+
+func (s *OrderServiceImpl) GetOrder(ctx context.Context, name string) (domain.Order, error) {
+	order, err := s.repo.Get(ctx, name)
+	if err != nil {
+		return domain.Order{}, fmt.Errorf("failed to get order: %w", err)
+	}
+	return order, nil
+}
+
+func (s *OrderServiceImpl) SetOrderStatus(ctx context.Context, name string, status domain.OrderStatus) error {
+	return s.repo.SetStatus(ctx, name, status)
 }

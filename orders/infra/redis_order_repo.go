@@ -24,6 +24,10 @@ func NewRedisOrderRepo(client redis.Cmdable) *RedisOrderRepo {
 }
 
 func (r *RedisOrderRepo) Create(ctx context.Context, order domain.Order) error {
+	return r.setOrder(ctx, order)
+}
+
+func (r *RedisOrderRepo) setOrder(ctx context.Context, order domain.Order) error {
 	key := fmt.Sprintf("order:%s", order.Name)
 	value, err := json.Marshal(order)
 	if err != nil {
@@ -55,7 +59,7 @@ func (r *RedisOrderRepo) Get(ctx context.Context, name string) (domain.Order, er
 	key := fmt.Sprintf("order:%s", name)
 	order, err := r.getOrderByKey(ctx, key)
 	if err != nil {
-		return domain.Order{}, fmt.Errorf("failed to get order: %w", err)
+		return domain.Order{}, err
 	}
 	return order, nil
 }
@@ -85,19 +89,29 @@ func (r *RedisOrderRepo) PushEvent(ctx context.Context, key string, event *pb.Ev
 	return r.client.LPush(ctx, key, value).Err()
 }
 
-func (r *RedisOrderRepo) PopEvent(ctx context.Context, key string, dest *pb.Event) error {
+func (r *RedisOrderRepo) PopEvent(ctx context.Context, key string) (*pb.Event, error) {
 	key = fmt.Sprintf("event:%s", key)
 	value, err := r.client.LMove(ctx, key, fmt.Sprintf("tmp:%s", key), "LEFT", "RIGHT").Result()
 	if errors.Is(err, redis.Nil) {
-		return fmt.Errorf("no events in queue %s", key)
+		return nil, fmt.Errorf("%w: %s is nil", services.ErrNoEvents, key)
 	}
 	if err != nil {
-		return fmt.Errorf("failed to pop event: %w", err)
+		return nil, fmt.Errorf("failed to pop event: %w", err)
 	}
+	dest := new(pb.Event)
 	if err := proto.Unmarshal([]byte(value), dest); err != nil {
-		return fmt.Errorf("failed to unmarshal event: %w", err)
+		return nil, fmt.Errorf("failed to unmarshal event: %w", err)
 	}
-	return nil
+	return dest, nil
+}
+
+func (r *RedisOrderRepo) SetStatus(ctx context.Context, name string, status domain.OrderStatus) error {
+	order, err := r.Get(ctx, name)
+	if err != nil {
+		return fmt.Errorf("failed to get order: %w", err)
+	}
+	order.Status = status
+	return r.setOrder(ctx, order)
 }
 
 // NOTE: After end of transaction, use previous client

@@ -2,6 +2,7 @@ package workers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -12,21 +13,17 @@ import (
 	"github.com/rabbitmq/amqp091-go"
 )
 
-type EventPublishWorker struct {
+type OutboxWorker struct {
 	ch        *amqp091.Channel
 	queue     *amqp091.Queue
 	orderRepo services.OrderRepo
 }
 
-func NewEventPublishWorker(orderRepo services.OrderRepo, ch *amqp091.Channel, queue *amqp091.Queue) *EventPublishWorker {
-	return &EventPublishWorker{orderRepo: orderRepo, ch: ch, queue: queue}
+func NewOutboxWorker(orderRepo services.OrderRepo, ch *amqp091.Channel, queue *amqp091.Queue) *OutboxWorker {
+	return &OutboxWorker{orderRepo: orderRepo, ch: ch, queue: queue}
 }
 
-func (w *EventPublishWorker) publishOrderCreated(evt *pb.Event) error {
-	return w.publishEvent(evt)
-}
-
-func (w *EventPublishWorker) publishEvent(event *pb.Event) error {
+func (w *OutboxWorker) publishEvent(event *pb.Event) error {
 	// serialize
 	bytes, err := proto.Marshal(event)
 	if err != nil {
@@ -36,24 +33,30 @@ func (w *EventPublishWorker) publishEvent(event *pb.Event) error {
 		Body:        bytes,
 		ContentType: "application/protobuf",
 	})
+	fmt.Println("published event:", event.Type, err)
 	return err
 }
 
-func (w *EventPublishWorker) Run(ctx context.Context) {
+func (w *OutboxWorker) Run(ctx context.Context) {
 	t := time.NewTicker(100 * time.Millisecond)
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			evt := new(pb.Event)
-			err := w.orderRepo.PopEvent(ctx, "order_created", evt)
+			evt, err := w.orderRepo.PopEvent(ctx, "outbox")
+			if errors.Is(err, services.ErrNoEvents) {
+				continue
+			}
 			if err != nil {
 				fmt.Println(err)
 				continue
 			}
-			err = w.publishOrderCreated(evt)
-			fmt.Println(err)
+			err = w.publishEvent(evt)
+			if err != nil {
+				fmt.Println("failed to publish event:", err)
+				continue
+			}
 		}
 	}
 }

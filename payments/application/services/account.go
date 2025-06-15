@@ -10,6 +10,7 @@ import (
 
 var ErrInsufficientBalance = errors.New("insufficient balance")
 var ErrAccountNotFound = fmt.Errorf("account not found")
+var ErrNoEvents = fmt.Errorf("no events found")
 
 type AccountRepo interface {
 	CreateAccount(ctx context.Context, userId int) error
@@ -21,6 +22,7 @@ type AccountRepo interface {
 
 	PushEvent(ctx context.Context, key string, event *pb.Event) error
 	PopEvent(ctx context.Context, key string, dest *pb.Event) error
+	UnpopEvent(ctx context.Context, key string, event *pb.Event) error
 }
 
 type AccountService interface {
