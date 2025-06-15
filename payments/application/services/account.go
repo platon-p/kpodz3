@@ -18,6 +18,10 @@ type AccountServiceImpl struct {
 	repo AccountRepo
 }
 
+func NewAccountService(repo AccountRepo) *AccountServiceImpl {
+	return &AccountServiceImpl{repo: repo}
+}
+
 func (s *AccountServiceImpl) CreateAccount(ctx context.Context, userId int) error {
 	return s.repo.CreateAccount(ctx, userId)
 }

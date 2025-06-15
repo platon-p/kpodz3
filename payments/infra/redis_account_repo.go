@@ -7,15 +7,21 @@ import (
 	"strconv"
 
 	"github.com/platon-p/kpodz3/payments/application/services"
+	"github.com/platon-p/kpodz3/payments/domain"
 	"github.com/redis/go-redis/v9"
 )
 
 var ErrAccountNotFound = fmt.Errorf("account not found")
+var ErrAccountAlreadyExists = fmt.Errorf("account already exists")
 
 var _ services.AccountRepo = (*RedisAccountRepo)(nil)
 
 type RedisAccountRepo struct {
 	client *redis.Client
+}
+
+func NewRedisAccountRepo(client *redis.Client) *RedisAccountRepo {
+	return &RedisAccountRepo{client: client}
 }
 
 func (r *RedisAccountRepo) CreateAccount(ctx context.Context, userId int) error {
@@ -26,7 +32,7 @@ func (r *RedisAccountRepo) CreateAccount(ctx context.Context, userId int) error 
 		return err
 	}
 	if exists > 0 {
-		return nil // Account already exists, no need to create it
+		return ErrAccountAlreadyExists
 	}
 
 	err = r.client.Set(ctx, key, 0, 0).Err()
@@ -71,6 +77,24 @@ func (r *RedisAccountRepo) GetBalance(ctx context.Context, userId int) (int, err
 		return 0, fmt.Errorf("invalid balance value for user %d: %w", userId, err)
 	}
 	return balance, nil
+}
+
+func (r *RedisAccountRepo) GetAccount(ctx context.Context, userId int) (domain.Account, error) {
+	var account domain.Account
+	key := r.buildAccountKey(userId)
+	val, err := r.client.Get(ctx, key).Result()
+	if errors.Is(err, redis.Nil) {
+		return account, ErrAccountNotFound // Account does not exist
+	}
+	if err != nil {
+		return account, fmt.Errorf("failed to get account of user %d: %w", userId, err)
+	}
+	balance, err := strconv.Atoi(val)
+	if err != nil {
+		return account, fmt.Errorf("invalid balance value for user %d: %w", userId, err)
+	}
+	account = domain.Account{UserId: userId, Balance: balance}
+	return account, nil
 }
 
 func (r *RedisAccountRepo) buildAccountKey(userId int) string {

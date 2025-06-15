@@ -1,0 +1,4 @@
+{
+    "redis": "localhost:6379",
+    "server_port": 8080
+}
