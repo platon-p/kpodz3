@@ -2,14 +2,26 @@ package services
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/platon-p/kpodz3/orders/domain"
 )
 
+type TXable[T any] interface {
+	TxBegin(ctx context.Context) T
+	TxCommit(ctx context.Context) error
+	TxRollback(ctx context.Context) error
+}
+
 type OrderRepo interface {
+	TXable[OrderRepo]
+
 	Create(ctx context.Context, order domain.Order) error
 	GetAll(ctx context.Context) ([]domain.Order, error)
 	Get(ctx context.Context, name string) (domain.Order, error)
+
+	PushEvent(ctx context.Context, key string, task any) error
+	PopEvent(ctx context.Context, key string, dest any) error
 }
 
 type OrderService interface {
@@ -19,22 +31,11 @@ type OrderService interface {
 }
 
 type OrderServiceImpl struct {
-	repo                   OrderRepo
-	onOrderCreatedHandlers []func(domain.Order)
+	repo OrderRepo
 }
 
 func NewOrderService(repo OrderRepo) *OrderServiceImpl {
-	return &OrderServiceImpl{repo: repo, onOrderCreatedHandlers: make([]func(domain.Order), 0)}
-}
-
-func (s *OrderServiceImpl) SubscribeOrderCreated(handler func(domain.Order)) {
-	s.onOrderCreatedHandlers = append(s.onOrderCreatedHandlers, handler)
-}
-
-func (s *OrderServiceImpl) onOrderCreated(order domain.Order) {
-	for _, handler := range s.onOrderCreatedHandlers {
-		handler(order)
-	}
+	return &OrderServiceImpl{repo: repo}
 }
 
 func (s *OrderServiceImpl) CreateOrder(ctx context.Context, userId int, title string, amount int) (domain.Order, error) {
@@ -43,10 +44,24 @@ func (s *OrderServiceImpl) CreateOrder(ctx context.Context, userId int, title st
 		Name:   title,
 		Amount: amount,
 	}
-	err := s.repo.Create(ctx, order)
+	repo := s.repo.TxBegin(ctx)
+	err := func() error {
+		if err := repo.Create(ctx, order); err != nil {
+			return err
+		}
+		if err := repo.PushEvent(ctx, "order_created", order); err != nil {
+			return err
+		}
+		return nil
+	}()
 	if err != nil {
-		return domain.Order{}, err
+		if rollbackErr := repo.TxRollback(ctx); rollbackErr != nil {
+			return domain.Order{}, rollbackErr
+		}
+		return domain.Order{}, fmt.Errorf("failed to create order: %w", err)
 	}
-	s.onOrderCreated(order)
+	if err := repo.TxCommit(ctx); err != nil {
+		return domain.Order{}, fmt.Errorf("failed to commit transaction: %w", err)
+	}
 	return order, nil
 }

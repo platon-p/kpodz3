@@ -2,12 +2,10 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/platon-p/kpodz3/orders/application/services"
 	"github.com/platon-p/kpodz3/orders/application/workers"
-	"github.com/platon-p/kpodz3/orders/domain"
 	"github.com/platon-p/kpodz3/orders/infra"
 	"github.com/rabbitmq/amqp091-go"
 	"github.com/redis/go-redis/v9"
@@ -20,24 +18,26 @@ func main() {
 	os := infra.NewRedisOrderRepo(redisClient)
 	s := services.NewOrderService(os)
 
-	s.SubscribeOrderCreated(func(o domain.Order) {
-		fmt.Println(o)
-	})
-
-	q, err := amqp091.Dial("amqp://user:password@localhost:5672/")
+	conn, err := amqp091.Dial("amqp://user:password@localhost:5672/")
 	if err != nil {
 		panic(err)
 	}
-	mqchan, err := q.Channel()
+	mqchan, err := conn.Channel()
+	if err != nil {
+		panic(err)
+	}
+	myQueue, err := mqchan.QueueDeclare("myqueue", true, false, false, false, nil)
 	if err != nil {
 		panic(err)
 	}
 
-	w := workers.NewEventPublishWorker(mqchan)
-	s.SubscribeOrderCreated(w.PublishOrderCreated)
+	w := workers.NewEventPublishWorker(os, mqchan, &myQueue)
+	_ = w
 
 	_, err = s.CreateOrder(context.Background(), 1, "test", 100)
-	fmt.Println(err)
 
+	go func() {
+		w.Run(context.Background())
+	}()
 	time.Sleep(10 * time.Second)
 }
