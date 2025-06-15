@@ -1,1 +1,3 @@
 .vscode
+proto/*
+!proto/go.mod

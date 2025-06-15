@@ -13,7 +13,7 @@ import (
 
 func main() {
 	redisClient := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
+		Addr: "localhost:6378",
 	})
 	os := infra.NewRedisOrderRepo(redisClient)
 	s := services.NewOrderService(os)

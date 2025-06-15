@@ -1,9 +1,13 @@
 package main
 
 import (
+	"context"
+
 	"github.com/platon-p/kpodz3/payments/application/server"
 	"github.com/platon-p/kpodz3/payments/application/services"
+	"github.com/platon-p/kpodz3/payments/application/workers"
 	"github.com/platon-p/kpodz3/payments/infra"
+	"github.com/rabbitmq/amqp091-go"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -21,5 +25,24 @@ func run(cfg Config) error {
 
 	httpServer := server.NewHTTPServer(cfg.ServerPort, accountService)
 	httpServer.Setup()
+
+	conn, err := amqp091.Dial("amqp://user:password@localhost:5672/")
+	if err != nil {
+		return err
+	}
+	ch, err := conn.Channel()
+	if err != nil {
+		return err
+	}
+	defer ch.Close()
+
+	queue, err := ch.QueueDeclare("myqueue", true, false, false, false, nil)
+	if err != nil {
+		return err
+	}
+
+	w := workers.NewInboxWorker(ch, &queue, accountRepo, accountService)
+	go func() { w.Run(context.Background()) }()
+
 	return httpServer.Serve()
 }

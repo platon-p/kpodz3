@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/platon-p/kpodz3/orders/domain"
+	pb "github.com/platon-p/kpodz3/proto"
 )
 
 type TXable[T any] interface {
@@ -20,8 +21,8 @@ type OrderRepo interface {
 	GetAll(ctx context.Context) ([]domain.Order, error)
 	Get(ctx context.Context, name string) (domain.Order, error)
 
-	PushEvent(ctx context.Context, key string, task any) error
-	PopEvent(ctx context.Context, key string, dest any) error
+	PushEvent(ctx context.Context, key string, event *pb.Event) error
+	PopEvent(ctx context.Context, key string, dest *pb.Event) error
 }
 
 type OrderService interface {
@@ -49,7 +50,17 @@ func (s *OrderServiceImpl) CreateOrder(ctx context.Context, userId int, title st
 		if err := repo.Create(ctx, order); err != nil {
 			return err
 		}
-		if err := repo.PushEvent(ctx, "order_created", order); err != nil {
+		evt := &pb.Event{
+			Type: pb.Event_TypeOrderCreated,
+			Data: &pb.Event_OrderCreated{
+				OrderCreated: &pb.Event_Order_Created{
+					Name:   order.Name,
+					UserId: int32(order.UserId),
+					Amount: int32(order.Amount),
+				},
+			},
+		}
+		if err := repo.PushEvent(ctx, "order_created", evt); err != nil {
 			return err
 		}
 		return nil

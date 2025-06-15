@@ -8,6 +8,10 @@ services:
     environment:
       - RABBITMQ_DEFAULT_USER=user
       - RABBITMQ_DEFAULT_PASS=password
+  orders-redis:
+    image: redis:latest
+    ports:
+      - "6378:6378"
   payments-redis:
     image: redis:latest
     ports:

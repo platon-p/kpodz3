@@ -8,7 +8,9 @@ import (
 
 	"github.com/platon-p/kpodz3/orders/application/services"
 	"github.com/platon-p/kpodz3/orders/domain"
+	pb "github.com/platon-p/kpodz3/proto"
 	"github.com/redis/go-redis/v9"
+	"google.golang.org/protobuf/proto"
 )
 
 var _ services.OrderRepo = (*RedisOrderRepo)(nil)
@@ -74,33 +76,25 @@ func (r *RedisOrderRepo) getOrderByKey(ctx context.Context, key string) (domain.
 	return order, nil
 }
 
-func (r *RedisOrderRepo) PushEvent(ctx context.Context, key string, event any) error {
+func (r *RedisOrderRepo) PushEvent(ctx context.Context, key string, event *pb.Event) error {
 	key = fmt.Sprintf("event:%s", key)
-	value, err := json.Marshal(event)
+	value, err := proto.Marshal(event)
 	if err != nil {
 		return fmt.Errorf("failed to marshal event: %w", err)
 	}
 	return r.client.LPush(ctx, key, value).Err()
 }
 
-func (r *RedisOrderRepo) PopEvent(ctx context.Context, key string, dest any) error {
+func (r *RedisOrderRepo) PopEvent(ctx context.Context, key string, dest *pb.Event) error {
 	key = fmt.Sprintf("event:%s", key)
-	// check length
-	if length, err := r.client.LLen(ctx, key).Result(); err != nil {
-		return fmt.Errorf("failed to get length of queue %s: %w", key, err)
-	} else if length == 0 {
-		fmt.Println(12)
-		return fmt.Errorf("no events in queue %s", key)
-	}
-	value, err := r.client.RPop(ctx, key).Result()
+	value, err := r.client.LMove(ctx, key, fmt.Sprintf("tmp:%s", key), "LEFT", "RIGHT").Result()
 	if errors.Is(err, redis.Nil) {
 		return fmt.Errorf("no events in queue %s", key)
 	}
 	if err != nil {
 		return fmt.Errorf("failed to pop event: %w", err)
 	}
-	if err := json.Unmarshal([]byte(value), dest); err != nil {
-		fmt.Println(key)
+	if err := proto.Unmarshal([]byte(value), dest); err != nil {
 		return fmt.Errorf("failed to unmarshal event: %w", err)
 	}
 	return nil

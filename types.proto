@@ -1,0 +1,49 @@
+syntax = "proto3";
+package proto;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/platon-p/kpodz3/proto";
+
+message Event {
+  google.protobuf.Timestamp timestamp = 1;
+  Type type = 2;
+  oneof Data {
+    Order.Created order_created = 3;
+    Order.Success order_success = 4;
+    Order.Failed order_failed = 5;
+  }
+  enum Type {
+    TypeUnknown = 0;
+
+    TypeOrderCreated = 1;
+    TypeOrderSuccess = 2;
+    TypeOrderFailed = 3;
+  }
+
+  message Order {
+    message Created {
+      string name = 1;
+      int32 user_id = 2;
+      int32 amount = 3;
+    }
+
+    message Success {
+      string name = 1;
+      int32 user_id = 2;
+    }
+
+    message Failed {
+      string name = 1;
+      int32 user_id = 2;
+      Reason reason = 3;
+
+      enum Reason {
+        ReasonUnknown = 0;
+
+        ReasonInsufficientBalance = 1;
+        ReasonAccountNotFound = 2;
+      }
+    }
+  }
+}

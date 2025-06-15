@@ -25,14 +25,12 @@ func NewHTTPServer(port int, accountService services.AccountService) *HttpServer
 	}
 }
 
-func (s *HttpServer) Setup() error {
+func (s *HttpServer) Setup() {
 	s.engine = gin.Default()
 	s.engine.Group("/accounts/:userId").
 		POST("/create", s.createAccount).
 		POST("/topup", s.topUp).
 		GET("/balance", s.getBalance)
-
-	return nil
 }
 
 func (s *HttpServer) Serve() error {
