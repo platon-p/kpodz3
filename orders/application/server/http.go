@@ -26,7 +26,7 @@ func NewHTTPServer(port int, orderService services.OrderService) *HTTPServer {
 func (s *HTTPServer) Setup() {
 	s.engine = gin.Default()
 
-	s.engine.Group("/orders").
+	s.engine.Group("/").
 		POST("", s.createOrder).
 		GET("", s.getAllOrders).
 		GET("/:name", s.getOrder)

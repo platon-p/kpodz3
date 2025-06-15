@@ -13,18 +13,20 @@ import (
 )
 
 type Config struct {
-	RedisAddr  string `env:"REDIS_ADDR"`
-	ServerPort int    `env:"SERVER_PORT"`
-	MQAddr     string `env:"MQ_ADDR"`
-	QueueName  string `env:"QUEUE_NAME"`
+	RedisAddr      string `env:"REDIS_ADDR"`
+	ServerPort     int    `env:"SERVER_PORT"`
+	MQAddr         string `env:"MQ_ADDR"`
+	QueueOrder2Pay string `env:"QUEUE_ORDER_2_PAY"`
+	QueuePay2Order string `env:"QUEUE_PAY_2_ORDER"`
 }
 
 func NewDefaultConfig() Config {
 	return Config{
-		RedisAddr:  "localhost:6378",
-		ServerPort: 8888,
-		MQAddr:     "amqp://user:password@localhost:5672/",
-		QueueName:  "myqueue",
+		RedisAddr:      "localhost:6378",
+		ServerPort:     8888,
+		MQAddr:         "amqp://user:password@localhost:5672/",
+		QueueOrder2Pay: "order2pay",
+		QueuePay2Order: "pay2order",
 	}
 }
 
@@ -41,7 +43,11 @@ func run(cfg Config) error {
 	if err != nil {
 		return err
 	}
-	myQueue, err := mqchan.QueueDeclare(cfg.QueueName, true, false, false, false, nil)
+	pay2order, err := mqchan.QueueDeclare(cfg.QueuePay2Order, true, false, false, false, nil)
+	if err != nil {
+		return err
+	}
+	order2pay, err := mqchan.QueueDeclare(cfg.QueueOrder2Pay, true, false, false, false, nil)
 	if err != nil {
 		return err
 	}
@@ -49,20 +55,16 @@ func run(cfg Config) error {
 	orderRepo := infra.NewRedisOrderRepo(redisClient)
 	orderService := services.NewOrderService(orderRepo)
 
-	outbox := workers.NewOutboxWorker(orderRepo, mqchan, &myQueue)
-	tasker := workers.NewTaskWorker(zap.L(), orderService, mqchan, &myQueue)
+	outbox := workers.NewOutboxWorker(orderRepo, mqchan, &order2pay)
+	tasker := workers.NewTaskWorker(zap.L(), orderService, mqchan, &pay2order)
 
 	httpServer := server.NewHTTPServer(cfg.ServerPort, orderService)
 	httpServer.Setup()
 
 	task := func() error {
 		ctx := context.Background()
-		go func() {
-			outbox.Run(ctx)
-		}()
-		go func() {
-			tasker.Run(ctx)
-		}()
+		go func() { outbox.Run(ctx) }()
+		go func() { tasker.Run(ctx) }()
 		return httpServer.Run()
 	}
 

@@ -9,24 +9,33 @@ import (
 	"github.com/platon-p/kpodz3/payments/infra"
 	"github.com/rabbitmq/amqp091-go"
 	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
 )
 
 type Config struct {
-	Redis      string `json:"redis" env:"REDIS" default:"localhost:6379"`
-	ServerPort int    `json:"server_port" env:"SERVER_PORT" default:"8080"`
+	Redis          string `env:"REDIS"`
+	ServerPort     int    `env:"SERVER_PORT"`
+	MQAddr         string `env:"MQ_ADDR"`
+	QueueOrder2Pay string `env:"QUEUE_ORDER_2_PAY"`
+	QueuePay2Order string `env:"QUEUE_PAY_2_ORDER"`
+}
+
+func NewDefaultConfig() Config {
+	return Config{
+		Redis:          "localhost:6379",
+		ServerPort:     8080,
+		MQAddr:         "amqp://user:password@localhost:5672/",
+		QueueOrder2Pay: "order2pay",
+		QueuePay2Order: "pay2order",
+	}
 }
 
 func run(cfg Config) error {
 	redisClient := redis.NewClient(&redis.Options{
 		Addr: cfg.Redis,
 	})
-	accountRepo := infra.NewRedisAccountRepo(redisClient)
-	accountService := services.NewAccountService(accountRepo)
 
-	httpServer := server.NewHTTPServer(cfg.ServerPort, accountService)
-	httpServer.Setup()
-
-	conn, err := amqp091.Dial("amqp://user:password@localhost:5672/")
+	conn, err := amqp091.Dial(cfg.MQAddr)
 	if err != nil {
 		return err
 	}
@@ -36,19 +45,32 @@ func run(cfg Config) error {
 	}
 	defer ch.Close()
 
-	queue, err := ch.QueueDeclare("myqueue", true, false, false, false, nil)
+	order2pay, err := ch.QueueDeclare(cfg.QueueOrder2Pay, true, false, false, false, nil)
+	if err != nil {
+		return err
+	}
+	pay2order, err := ch.QueueDeclare(cfg.QueuePay2Order, true, false, false, false, nil)
 	if err != nil {
 		return err
 	}
 
-	inbox := workers.NewInboxWorker(ch, &queue, accountRepo, accountService)
-	go func() { inbox.Run(context.Background()) }()
+	accountRepo := infra.NewRedisAccountRepo(redisClient)
+	accountService := services.NewAccountService(accountRepo)
 
-	outbox := workers.NewOutboxWorker(accountRepo, ch, &queue)
-	go func() { outbox.Run(context.Background()) }()
+	httpServer := server.NewHTTPServer(cfg.ServerPort, accountService)
+	httpServer.Setup()
 
-	tasker := workers.NewTaskWorker(accountService, accountRepo, ch, &queue)
-	go func() { tasker.Run(context.Background()) }()
+	inbox := workers.NewInboxWorker(zap.L(), ch, &order2pay, accountRepo, accountService)
+	outbox := workers.NewOutboxWorker(accountRepo, ch, &pay2order)
+	tasker := workers.NewTaskWorker(accountService, accountRepo, ch, &pay2order)
 
-	return httpServer.Serve()
+	task := func() error {
+		ctx := context.Background()
+		go func() { inbox.Run(ctx) }()
+		go func() { outbox.Run(ctx) }()
+		go func() { tasker.Run(ctx) }()
+
+		return httpServer.Serve()
+	}
+	return task()
 }

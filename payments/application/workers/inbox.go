@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/rabbitmq/amqp091-go"
+	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/platon-p/kpodz3/payments/application/services"
@@ -14,6 +15,8 @@ import (
 var ErrUnknownEventType = fmt.Errorf("unknown event type")
 
 type InboxWorker struct {
+	logger *zap.Logger
+
 	ch    *amqp091.Channel
 	queue *amqp091.Queue
 
@@ -22,12 +25,13 @@ type InboxWorker struct {
 }
 
 func NewInboxWorker(
+	logger *zap.Logger,
 	ch *amqp091.Channel,
 	queue *amqp091.Queue,
 	accountRepo services.AccountRepo,
 	accountService services.AccountService,
 ) *InboxWorker {
-	return &InboxWorker{ch: ch, queue: queue, accountRepo: accountRepo, accountService: accountService}
+	return &InboxWorker{logger: logger, ch: ch, queue: queue, accountRepo: accountRepo, accountService: accountService}
 }
 
 func (w *InboxWorker) Run(ctx context.Context) {
@@ -66,6 +70,7 @@ func (w *InboxWorker) handleMessage(msg *amqp091.Delivery) error {
 }
 
 func (w *InboxWorker) handleEvent(msg *amqp091.Delivery, e *pb.Event) error {
+	w.logger.Info("handle event", zap.String("type", e.Type.String()))
 	switch e.Type {
 	case pb.Event_TypeOrderCreated:
 		return w.handleOrderCreated(msg, e)

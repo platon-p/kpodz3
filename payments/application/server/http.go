@@ -27,10 +27,10 @@ func NewHTTPServer(port int, accountService services.AccountService) *HttpServer
 
 func (s *HttpServer) Setup() {
 	s.engine = gin.Default()
-	s.engine.Group("/accounts/:userId").
-		POST("/create", s.createAccount).
-		POST("/topup", s.topUp).
-		GET("/balance", s.getBalance)
+	s.engine.Group("/:userId").
+		GET("/", s.getBalance).
+		POST("/", s.createAccount).
+		PUT("/", s.topUp)
 }
 
 func (s *HttpServer) Serve() error {

@@ -23,20 +23,6 @@ func NewOutboxWorker(orderRepo services.OrderRepo, ch *amqp091.Channel, queue *a
 	return &OutboxWorker{orderRepo: orderRepo, ch: ch, queue: queue}
 }
 
-func (w *OutboxWorker) publishEvent(event *pb.Event) error {
-	// serialize
-	bytes, err := proto.Marshal(event)
-	if err != nil {
-		return err
-	}
-	err = w.ch.Publish("", w.queue.Name, false, false, amqp091.Publishing{
-		Body:        bytes,
-		ContentType: "application/protobuf",
-	})
-	fmt.Println("published event:", event.Type, err)
-	return err
-}
-
 func (w *OutboxWorker) Run(ctx context.Context) {
 	t := time.NewTicker(100 * time.Millisecond)
 	for {
@@ -52,6 +38,7 @@ func (w *OutboxWorker) Run(ctx context.Context) {
 				fmt.Println(err)
 				continue
 			}
+			fmt.Println("moving event from outbox to queue", evt)
 			err = w.publishEvent(evt)
 			if err != nil {
 				fmt.Println("failed to publish event:", err)
@@ -59,4 +46,18 @@ func (w *OutboxWorker) Run(ctx context.Context) {
 			}
 		}
 	}
+}
+
+func (w *OutboxWorker) publishEvent(event *pb.Event) error {
+	// serialize
+	bytes, err := proto.Marshal(event)
+	if err != nil {
+		return err
+	}
+	err = w.ch.Publish("", w.queue.Name, false, false, amqp091.Publishing{
+		Body:        bytes,
+		ContentType: "application/protobuf",
+	})
+	fmt.Println("published event:", event.Type, err)
+	return err
 }

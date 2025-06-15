@@ -7,8 +7,8 @@ import (
 )
 
 func main() {
-	var cfg Config
-	err := cleanenv.ReadConfig("config.json", &cfg)
+	cfg := NewDefaultConfig()
+	err := cleanenv.ReadEnv(&cfg)
 	if err != nil {
 		log.Fatalln(err)
 	}
