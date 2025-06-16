@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"time"
 
 	"github.com/platon-p/kpodz3/payments/application/server"
 	"github.com/platon-p/kpodz3/payments/application/services"
@@ -13,7 +14,7 @@ import (
 )
 
 type Config struct {
-	Redis          string `env:"REDIS"`
+	Redis          string `env:"REDIS_ADDR"`
 	ServerPort     int    `env:"SERVER_PORT"`
 	MQAddr         string `env:"MQ_ADDR"`
 	QueueOrder2Pay string `env:"QUEUE_ORDER_2_PAY"`
@@ -35,6 +36,7 @@ func run(cfg Config) error {
 		Addr: cfg.Redis,
 	})
 
+	time.Sleep(8 * time.Second)
 	conn, err := amqp091.Dial(cfg.MQAddr)
 	if err != nil {
 		return err

@@ -1,0 +1,156 @@
+{
+	"info": {
+		"_postman_id": "5bfded33-87e4-4895-ba29-d9d4b001dd31",
+		"name": "New Collection",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "25805662"
+	},
+	"item": [
+		{
+			"name": "orders:getall",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "localhost/orders",
+					"host": [
+						"localhost"
+					],
+					"path": [
+						"orders"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "orders:create",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"user_id\": 1,\n    \"name\": \"dbbb\",\n    \"amount\": 20\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "localhost/orders/",
+					"host": [
+						"localhost"
+					],
+					"path": [
+						"orders",
+						""
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "orders:getByName",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "localhost/orders/asd",
+					"host": [
+						"localhost"
+					],
+					"path": [
+						"orders",
+						"asd"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "pay:create",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"url": {
+					"raw": "localhost/payments/1/",
+					"host": [
+						"localhost"
+					],
+					"path": [
+						"payments",
+						"1",
+						""
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "pay:topup",
+			"request": {
+				"method": "PUT",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "localhost/payments/1/?amount=20",
+					"host": [
+						"localhost"
+					],
+					"path": [
+						"payments",
+						"1",
+						""
+					],
+					"query": [
+						{
+							"key": "amount",
+							"value": "20"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "pay:balance",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "localhost/payments/1/",
+					"host": [
+						"localhost"
+					],
+					"path": [
+						"payments",
+						"1",
+						""
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}

@@ -9,6 +9,7 @@ import (
 )
 
 var ErrNoEvents = fmt.Errorf("no events")
+var ErrNoOrder = fmt.Errorf("no order found")
 
 type TXable[T any] interface {
 	TxBegin(ctx context.Context) T
@@ -82,6 +83,7 @@ func (s *OrderServiceImpl) CreateOrder(ctx context.Context, userId int, title st
 	}
 	return order, nil
 }
+
 func (s *OrderServiceImpl) GetAllOrders(ctx context.Context) ([]domain.Order, error) {
 	orders, err := s.repo.GetAll(ctx)
 	if err != nil {
@@ -91,11 +93,7 @@ func (s *OrderServiceImpl) GetAllOrders(ctx context.Context) ([]domain.Order, er
 }
 
 func (s *OrderServiceImpl) GetOrder(ctx context.Context, name string) (domain.Order, error) {
-	order, err := s.repo.Get(ctx, name)
-	if err != nil {
-		return domain.Order{}, fmt.Errorf("failed to get order: %w", err)
-	}
-	return order, nil
+	return s.repo.Get(ctx, name)
 }
 
 func (s *OrderServiceImpl) SetOrderStatus(ctx context.Context, name string, status domain.OrderStatus) error {

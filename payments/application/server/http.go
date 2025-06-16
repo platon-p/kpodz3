@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -40,56 +41,61 @@ func (s *HttpServer) Serve() error {
 func (s *HttpServer) createAccount(c *gin.Context) {
 	userId, err := getUserId(c)
 	if err != nil {
-		c.Error(err)
-		c.AbortWithStatus(http.StatusBadRequest)
+		c.JSON(http.StatusBadRequest, "invalid user ID")
 		return
 	}
 	err = s.AccountService.CreateAccount(c.Request.Context(), userId)
-	if err != nil {
-		c.Error(err)
-		c.AbortWithStatus(http.StatusInternalServerError)
+	if errors.Is(err, services.ErrAccountAlreadyExists) {
+		c.JSON(http.StatusConflict, "account already exists")
 		return
 	}
-	c.Status(http.StatusOK)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, err.Error())
+		return
+	}
+	c.JSON(http.StatusOK, "ok")
 }
 
 func (s *HttpServer) topUp(c *gin.Context) {
 	userId, err := getUserId(c)
 	if err != nil {
-		c.Error(err)
-		c.AbortWithStatus(http.StatusBadRequest)
+		c.JSON(http.StatusBadRequest, "invalid user ID")
 		return
 	}
 
 	amountStr := c.Query("amount")
 	amount, err := strconv.Atoi(amountStr)
 	if err != nil {
-		c.Error(err)
-		c.AbortWithStatus(http.StatusBadRequest)
+		c.JSON(http.StatusBadRequest, "invalid amount")
 		return
 	}
 
 	err = s.AccountService.TopUp(c.Request.Context(), userId, amount)
-	if err != nil {
-		c.Error(err)
-		c.AbortWithStatus(http.StatusInternalServerError)
+	if errors.Is(err, services.ErrAccountNotFound) {
+		c.JSON(http.StatusNotFound, "account not found")
 		return
 	}
-	c.Status(http.StatusOK)
-
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, err.Error())
+		return
+	}
+	c.JSON(http.StatusOK, "ok")
 }
+
 func (s *HttpServer) getBalance(c *gin.Context) {
 	userId, err := getUserId(c)
 	if err != nil {
-		c.Error(err)
-		c.AbortWithStatus(http.StatusBadRequest)
+		c.JSON(http.StatusBadRequest, "invalid user ID")
 		return
 	}
 
 	balance, err := s.AccountService.GetBalance(c.Request.Context(), userId)
+	if errors.Is(err, services.ErrAccountNotFound) {
+		c.JSON(http.StatusNotFound, "account not found")
+		return
+	}
 	if err != nil {
-		c.Error(err)
-		c.AbortWithStatus(http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, err.Error())
 		return
 	}
 	c.JSON(http.StatusOK, balance)

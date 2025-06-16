@@ -14,8 +14,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-var ErrAccountAlreadyExists = fmt.Errorf("account already exists")
-
 var _ services.AccountRepo = (*RedisAccountRepo)(nil)
 
 type RedisAccountRepo struct {
@@ -34,7 +32,7 @@ func (r *RedisAccountRepo) CreateAccount(ctx context.Context, userId int) error 
 		return err
 	}
 	if exists > 0 {
-		return ErrAccountAlreadyExists
+		return services.ErrAccountAlreadyExists
 	}
 
 	err = r.client.Set(ctx, key, 0, 0).Err()

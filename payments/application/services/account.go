@@ -10,6 +10,7 @@ import (
 
 var ErrInsufficientBalance = errors.New("insufficient balance")
 var ErrAccountNotFound = fmt.Errorf("account not found")
+var ErrAccountAlreadyExists = fmt.Errorf("account already exists")
 var ErrNoEvents = fmt.Errorf("no events found")
 
 type AccountRepo interface {

@@ -57,11 +57,7 @@ func (r *RedisOrderRepo) GetAll(ctx context.Context) ([]domain.Order, error) {
 
 func (r *RedisOrderRepo) Get(ctx context.Context, name string) (domain.Order, error) {
 	key := fmt.Sprintf("order:%s", name)
-	order, err := r.getOrderByKey(ctx, key)
-	if err != nil {
-		return domain.Order{}, err
-	}
-	return order, nil
+	return r.getOrderByKey(ctx, key)
 }
 
 func (r *RedisOrderRepo) getOrderByKey(ctx context.Context, key string) (domain.Order, error) {
@@ -69,7 +65,7 @@ func (r *RedisOrderRepo) getOrderByKey(ctx context.Context, key string) (domain.
 
 	value, err := r.client.Get(ctx, key).Result()
 	if errors.Is(err, redis.Nil) {
-		return order, fmt.Errorf("key %s does not exist", key)
+		return order, services.ErrNoOrder
 	}
 	if err != nil {
 		return order, fmt.Errorf("failed to get order: %w", err)

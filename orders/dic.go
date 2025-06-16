@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"time"
 
 	"github.com/platon-p/kpodz3/orders/application/server"
 	"github.com/platon-p/kpodz3/orders/application/services"
@@ -35,6 +36,7 @@ func run(cfg Config) error {
 		Addr: cfg.RedisAddr,
 	})
 
+	time.Sleep(8 * time.Second)
 	conn, err := amqp091.Dial(cfg.MQAddr)
 	if err != nil {
 		return err
