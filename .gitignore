@@ -1,3 +1,4 @@
 .vscode
 proto/*
 !proto/go.mod
+!proto/Dockerfile
